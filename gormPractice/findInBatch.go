@@ -15,12 +15,13 @@ func (Ssldomainlist Ssldomainlist) TableName() string {
 
 // Ssldomainlist [...]
 type Ssldomainlist struct {
-	Domain string `gorm:"primary_key;column:domain;type:varchar(80);not null" json:"Domain"`
+	Domain string `gorm:"primary_key;column:domain;type:varchar(80);not null" json:"-"`
 	TaxID  string `gorm:"column:taxID;type:varchar(8);not null" json:"tax_id"`
 	Status int    `gorm:"column:status;type:int;not null" json:"status"`
 }
 
 func main() {
+
 	dsn := "test:sslverify@tcp(127.0.0.1:3306)/sslverify?charset=utf8mb4&parseTime=True&loc=Local"
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -34,7 +35,8 @@ func main() {
 	sqlDB.SetMaxOpenConns(150)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	// batch size 100
-	var results []Ssldomainlist
+	//var results []Ssldomainlist
+	results := []Ssldomainlist{}
 	//var results []map[string]interface{}
 	result := db.Where("status = ?", 1).FindInBatches(&results, 1000, func(tx *gorm.DB, batch int) error {
 		/*一次修正完畢
@@ -45,7 +47,7 @@ func main() {
 
 		for i, result := range results {
 			//result.Status = 0
-
+			//result.Status = 0
 			results[i].Status = 0
 			fmt.Println(result)
 		}
@@ -56,7 +58,7 @@ func main() {
 		//fmt.Println("1", tx.RowsAffected)
 		tx.Save(&results)
 		fmt.Println("2", tx.RowsAffected) // number of records in this batch
-		//fmt.Println(batch) // Batch 1, 2, 3
+		fmt.Println(batch)                // Batch 1, 2, 3
 		/*	if tx.Error != nil {
 
 			fmt.Println(tx.Error)
