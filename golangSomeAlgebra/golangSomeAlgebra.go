@@ -5,9 +5,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
+
+var count int
 
 //Expresion 結果
 type Expresion interface {
@@ -44,9 +44,9 @@ func getResult(e Expresion) int {
 	return e.result()
 }
 
-func generateVal(channel chan int, query string, wg *sync.WaitGroup) {
+func generateVal(channel chan int, query string) {
 
-	time.Sleep(500 * time.Millisecond)
+	//	time.Sleep(500 * time.Millisecond)
 	val := 0
 	if query[1] == '+' {
 		val = getResult(StringAddition{query})
@@ -54,33 +54,37 @@ func generateVal(channel chan int, query string, wg *sync.WaitGroup) {
 		val = getResult(StringMultiplication{query})
 	}
 	//待補
-	channel <- val
-	defer wg.Done()
+	//	channel <- val case就已經執行一次了
+	select {
+	case channel <- val:
+		{
+			count++
+			if count == 5 {
+				close(channel) //不close range不能用
+			}
+		}
+	}
 }
 
-func golangSomeAlgebra(queries []string, wg *sync.WaitGroup) []int {
+func golangSomeAlgebra(queries []string) []int {
 
 	result := []int{}
 	channel := make(chan int)
 	for i := 0; i < 5; i++ {
 		if len(queries) == (i + 1) {
-			wg.Add(1)
-			go generateVal(channel, queries[i], wg)
+
+			go generateVal(channel, queries[i])
 
 		} else {
-			wg.Add(1)
-			go generateVal(channel, queries[i], wg)
+
+			go generateVal(channel, queries[i])
 
 		}
 		queries[i] = ""
 	}
 	//待補
-	go func() {
-		wg.Wait()
-		fmt.Println("finish all job")
-		close(channel)
-	}() //所有goroutine都到背景了，所以wait也要去背景等，不然會hand住
-	for value := range channel { //range 要等close 才可以使用
+
+	for value := range channel { //range 要等close 才可以使用，所以可以當作wait來使用
 
 		result = append(result, value)
 	}
@@ -89,9 +93,9 @@ func golangSomeAlgebra(queries []string, wg *sync.WaitGroup) []int {
 	return result
 }
 func main() {
-	var wg sync.WaitGroup
+	//var wg sync.WaitGroup
 	queries := []string{"1+3", "0+2", "9+8", "9*2", "1*3"}
-	results := golangSomeAlgebra(queries, &wg)
+	results := golangSomeAlgebra(queries)
 
 	for _, result := range results {
 		fmt.Println(result)
