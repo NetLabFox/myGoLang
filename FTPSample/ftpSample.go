@@ -20,8 +20,8 @@ type error interface {
 var ip = flag.String("ip", "localhost", "ip位置")
 var acc = flag.String("acc", "fox", "帳號")
 var pwd = flag.String("pwd", "fox", "密碼")
-var epsv = flag.Bool("epsv", true, "EPSVmode")
 var tn = flag.String("tn", "", "threadNum")
+var epsv = flag.Bool("epsv", true, "EPSVmode")
 
 func main() {
 	flag.Parse()

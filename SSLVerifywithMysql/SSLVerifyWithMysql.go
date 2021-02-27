@@ -220,7 +220,13 @@ func smtpSSL(domain string, prefix string, port string, TaxID string, db *gorm.D
 		Sslresult.Issuer = ""
 		Sslresult.Notafter = time.Time{}
 		Sslresult.PrefixWithDomain = prefix + "." + domain
-		Sslresult.ErrorMsg = err.Error()
+		if strings.Contains(err.Error(), "+OK Microsoft Exchange Server 2003 POP3") {
+			fmt.Println(err.Error())
+			Sslresult.ErrorMsg = "異常"
+		} else {
+			Sslresult.ErrorMsg = err.Error()
+		}
+
 		Sslresult.UpdateTime = time.Now()
 		Sslresult.TaxID = TaxID
 		/*result := db.Create(&Sslresult)

@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func swap(a, b int) (int, int) {
 	a, b = b, a
@@ -14,4 +16,5 @@ func main() {
 	var a, b = foo(1, 2)
 	fmt.Printf("%d %d\n", a, b)
 	// 印出: 3
+
 }
