@@ -1,0 +1,1 @@
+test:sslverify@tcp(127.0.0.1:3306)/sslverify?charset=utf8mb4&parseTime=True&loc=Local

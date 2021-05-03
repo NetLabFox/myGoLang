@@ -3,8 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net"
 	"net/smtp"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -45,24 +48,57 @@ type Sslresult struct {
 	TaxID            string    `gorm:"column:taxID;type:varchar(8);not null" json:"tax_id"`
 }
 
+// csvResult 匯出報表用
+type csvResult struct {
+	TaxID            string
+	PrefixWithDomain string
+	Issuer           string
+	CertType         string
+	Notafter         time.Time
+}
+
 func main() {
+	var dsn string
+	current := time.Now()
+	timestamp := current.Format("2006-01-02")
+	logFile, err := os.Create("./" + timestamp + ".log")
+	if err != nil {
+		log.Fatalln("create file log.log failed")
+	}
+	defer logFile.Close()
+
+	configF, err := ioutil.ReadFile("./config")
+	if err != nil {
+		log.Fatalln("read file config failed")
+	}
+	config := string(configF)
+	logger := log.New(logFile, "[Debug]", log.Lshortfile)
 
 	var wg sync.WaitGroup
 	var rowscount int64
 	//var results []Ssldomainlist
-	dsn := "test:sslverify@tcp(127.0.0.1:3306)/sslverify?charset=utf8mb4&parseTime=True&loc=Local"
+	logger.Println("開始程式")
+	if config == "" {
+		dsn = "test:sslverify@tcp(127.0.0.1:3306)/sslverify?charset=utf8mb4&parseTime=True&loc=Local"
+	} else {
+		dsn = config
+	}
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		fmt.Println("連線失敗")
+		logger.Println("連線失敗")
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		fmt.Println("取得DB失敗")
+		logger.Println("取得DB失敗")
 	}
+
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(150)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 	count := 0
+
 Loop:
 	rows, err := db.Limit(10000).Model(&Ssldomainlist{}).Where("status = ?", 0).Rows()
 	defer rows.Close()
@@ -70,7 +106,7 @@ Loop:
 	for rows.Next() {
 		var Ssldomainlist Ssldomainlist
 		db.ScanRows(rows, &Ssldomainlist)
-		go getSSLInfo(Ssldomainlist.Domain, Ssldomainlist.TaxID, db, &wg)
+		go getSSLInfo(Ssldomainlist.Domain, Ssldomainlist.TaxID, db, &wg, logger)
 		wg.Add(1)
 		time.Sleep(300 * time.Millisecond)
 		count++
@@ -82,10 +118,26 @@ Loop:
 	if rowscount > 0 {
 		goto Loop
 	}
-
+	logger.Println("creat file report prepare")
+	csvF, err := os.Create("./" + timestamp + ".csv")
+	if err != nil {
+		log.Fatalln("create file report failed")
+	}
+	defer csvF.Close()
+	var report []csvResult
+	db.Raw("SELECT TaxID,PrefixWithDomain,Issuer,CertType,Notafter FROM sslverify.Sslresult where errorMsg=?", "").Scan(&report)
+	csvF.WriteString("TaxID,PrefixWithDomain,Issuer,CertType,Notafter" + "\n") //20210503要求要有title
+	for _, csvResult := range report {
+		_, err := csvF.WriteString(csvResult.TaxID + "," + csvResult.PrefixWithDomain + "," + csvResult.Issuer + "," + csvResult.CertType + "," + csvResult.Notafter.Format("2006-01-02") + "\n")
+		if err != nil {
+			log.Fatalln("write report failed")
+		}
+	}
+	db.Exec("DELETE FROM sslverify.Sslresult") //匯出後清掉資料
+	logger.Println("all the tasks done...", count)
 	fmt.Println("all the tasks done...", count)
 }
-func getSSLInfo(domain string, TaxID string, db *gorm.DB, wg *sync.WaitGroup) {
+func getSSLInfo(domain string, TaxID string, db *gorm.DB, wg *sync.WaitGroup, log *log.Logger) {
 
 	dic := [15]string{"www", "autodiscover", "app", "api", "shop", "eip", "uat", "portal", "vpn", "service", "mail", "webmail", "pop", "smtp", "imap"}
 
@@ -119,12 +171,12 @@ func getSSLInfo(domain string, TaxID string, db *gorm.DB, wg *sync.WaitGroup) {
 
 		if err != nil {
 			if prefix == "pop" {
-				Sslresult = smtpSSL(domain, prefix, ":110", TaxID, db)
+				Sslresult = smtpSSL(domain, prefix, ":110", TaxID, db, log)
 				Sslresults = append(Sslresults, Sslresult)
 				continue
 				//return issuer, notAfter, certType, err
 			} else if prefix == "imap" {
-				Sslresult = smtpSSL(domain, prefix, ":143", TaxID, db)
+				Sslresult = smtpSSL(domain, prefix, ":143", TaxID, db, log)
 				Sslresults = append(Sslresults, Sslresult)
 				continue
 				//return issuer, notAfter, certType, err
@@ -208,7 +260,7 @@ func getSSLInfo(domain string, TaxID string, db *gorm.DB, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func smtpSSL(domain string, prefix string, port string, TaxID string, db *gorm.DB) (Sslresult Sslresult) {
+func smtpSSL(domain string, prefix string, port string, TaxID string, db *gorm.DB, logger *log.Logger) (Sslresult Sslresult) {
 	//var Sslresult Sslresult
 	conf := &tls.Config{
 		InsecureSkipVerify: true,
@@ -220,10 +272,12 @@ func smtpSSL(domain string, prefix string, port string, TaxID string, db *gorm.D
 		Sslresult.Issuer = ""
 		Sslresult.Notafter = time.Time{}
 		Sslresult.PrefixWithDomain = prefix + "." + domain
-		if strings.Contains(err.Error(), "+OK Microsoft Exchange Server 2003 POP3") {
+		if strings.Contains(err.Error(), "+OK Microsoft Exchange Server 2003 POP3") || len(err.Error()) > 300 {
 			fmt.Println(err.Error())
+			logger.Println(err.Error())
 			Sslresult.ErrorMsg = "異常"
 		} else {
+			logger.Println(err.Error())
 			Sslresult.ErrorMsg = err.Error()
 		}
 
