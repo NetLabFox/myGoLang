@@ -32,9 +32,11 @@ func (Sslresult Sslresult) TableName() string {
 
 // Ssldomainlist [...]
 type Ssldomainlist struct {
-	Domain string `gorm:"primary_key;column:domain;type:varchar(80);not null" json:"Domain"`
-	TaxID  string `gorm:"column:taxID;type:varchar(8);not null" json:"tax_id"`
-	Status int    `gorm:"column:status;type:int;not null" json:"status"`
+	Domain      string `gorm:"primary_key;column:domain;type:varchar(80);not null" json:"-"` // 網域
+	TaxID       string `gorm:"column:taxID;type:varchar(8);not null" json:"tax_id"`          // 統編
+	Status      int    `gorm:"column:status;type:int;not null" json:"status"`                // 查詢狀態
+	CompanyName string `gorm:"column:companyName;type:varchar(80)" json:"company_name"`      // 企業名稱
+	CustomerID  string `gorm:"column:customerID;type:varchar(20)" json:"customer_id"`        // 企業代號
 }
 
 // Sslresult [...]
@@ -51,6 +53,8 @@ type Sslresult struct {
 // csvResult 匯出報表用
 type csvResult struct {
 	TaxID            string
+	CustomerID       string
+	CompanyName      string
 	PrefixWithDomain string
 	Issuer           string
 	CertType         string
@@ -125,10 +129,11 @@ Loop:
 	}
 	defer csvF.Close()
 	var report []csvResult
-	db.Raw("SELECT TaxID,PrefixWithDomain,Issuer,CertType,Notafter FROM sslverify.Sslresult where errorMsg=?", "").Scan(&report)
-	csvF.WriteString("TaxID,PrefixWithDomain,Issuer,CertType,Notafter" + "\n") //20210503要求要有title
+	//db.Raw("SELECT TaxID,PrefixWithDomain,Issuer,CertType,Notafter FROM sslverify.Sslresult where errorMsg=?", "").Scan(&report)
+	db.Raw("SELECT a.TaxID , b.customerID , b.companyName , a.PrefixWithDomain , a.Issuer , a.CertType , a.Notafter FROM sslverify.Sslresult as a, sslverify.ssldomainlist as b where errorMsg=? and a.taxID=b.taxID", "").Scan(&report)
+	csvF.WriteString("TaxID,CustomerID,CompanyName,PrefixWithDomain,Issuer,CertType,Notafter" + "\n") //20210503要求要有title
 	for _, csvResult := range report {
-		_, err := csvF.WriteString(csvResult.TaxID + "," + csvResult.PrefixWithDomain + "," + csvResult.Issuer + "," + csvResult.CertType + "," + csvResult.Notafter.Format("2006-01-02") + "\n")
+		_, err := csvF.WriteString(csvResult.TaxID + "," + csvResult.CustomerID + "," + csvResult.CompanyName + "," + csvResult.PrefixWithDomain + "," + csvResult.Issuer + "," + csvResult.CertType + "," + csvResult.Notafter.Format("2006-01-02") + "\n")
 		if err != nil {
 			log.Fatalln("write report failed")
 		}

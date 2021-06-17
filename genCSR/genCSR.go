@@ -17,7 +17,7 @@ import (
 		OU := []string{"CHT"}
 		subject.Country = C
 		subject.OrganizationalUnit = OU
-		subject.CommonName = "張香傑"
+		subject.CommonName = "fox"
 		keys, err := rsa.GenerateKey(reader, 2048)
 		template := x509.CertificateRequest{
 			SignatureAlgorithm: 4,
@@ -28,7 +28,7 @@ import (
 		csr, err := x509.CreateCertificateRequest(reader, &template, keys)
 		sEnc := b64.StdEncoding.EncodeToString([]byte(csr))
 		fmt.Println(sEnc)
-	GenCSR("TW", "CHT", []string{"資訊處"}, "張香傑")
+	GenCSR("TW", "CHT", []string{"資訊處"}, "fox")
 }*/
 
 //GenCSR 透過相關參數產生CSR
